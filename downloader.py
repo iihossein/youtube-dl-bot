@@ -15,7 +15,9 @@ DOWNLOAD_DIR = "downloads"
 MAX_RETRIES = 3
 RETRY_DELAY = 5
 
-BGUTIL_SERVER_HOME = "/app/bgutil-ytdlp-pot-provider/server"
+BGUTIL_SCRIPT_PATH = (
+    "/app/bgutil-ytdlp-pot-provider/server/build/generate_once.js"
+)
 
 
 def _get_cookie_path() -> str | None:
@@ -60,43 +62,44 @@ def _download_sync(
 ) -> None:
 
     ydl_opts = {
-        # کیفیت مناسب برای ربات
+        # بهترین کیفیت قابل دریافت
         "format": "bestvideo*+bestaudio/best",
 
-        # خروجی نهایی
+        # تبدیل خروجی نهایی به MP4
         "merge_output_format": "mp4",
 
-        # مسیر فایل
+        # مسیر خروجی
         "outtmpl": output_path,
 
-        # لاگ کمتر
+        # کاهش لاگ‌های yt-dlp
         "quiet": True,
         "no_warnings": True,
 
-        # فقط همان ویدیو
+        # فقط یک ویدیو
         "noplaylist": True,
 
         # استفاده از EJS
         "remote_components": "ejs:github",
 
-        # استفاده از Node برای JavaScript
+        # اجرای JavaScript با Node
         "js_runtimes": {
             "node": {},
         },
 
-        # YouTube client
+        # تنظیمات YouTube و PO Token
         "extractor_args": {
             "youtube": {
                 "player_client": ["mweb"],
             },
 
-            # استفاده از bgutil در حالت Script
+            # bgutil در حالت Script Mode
             "youtubepot-bgutilscript": {
-                "server_home": BGUTIL_SERVER_HOME,
+                "script_path": BGUTIL_SCRIPT_PATH,
             },
         },
     }
 
+    # اگر Cookie وجود داشت
     if cookie_path:
         ydl_opts["cookiefile"] = cookie_path
 
@@ -106,15 +109,19 @@ def _download_sync(
 
 async def download_video(url: str) -> str:
 
+    # ساخت پوشه دانلود در صورت نبودن
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+    # نام تصادفی برای فایل
     output_path = os.path.join(
         DOWNLOAD_DIR,
         f"{uuid.uuid4()}.mp4",
     )
 
+    # ساخت فایل Cookie موقت
     cookie_path = _get_cookie_path()
 
+    # اجرای yt-dlp خارج از event loop
     loop = asyncio.get_running_loop()
 
     try:
@@ -122,11 +129,13 @@ async def download_video(url: str) -> str:
         for attempt in range(1, MAX_RETRIES + 1):
 
             try:
+
                 logger.info(
                     f"Download attempt {attempt}/{MAX_RETRIES}: {url}"
                 )
 
-                # اگر از تلاش قبلی فایل ناقص باقی مانده باشد
+                # اگر فایل ناقصی از تلاش قبلی باقی مانده
+                # آن را حذف می‌کنیم
                 if os.path.exists(output_path):
                     os.remove(output_path)
 
@@ -138,6 +147,7 @@ async def download_video(url: str) -> str:
                     cookie_path,
                 )
 
+                # بررسی اینکه فایل واقعاً ساخته شده باشد
                 if not os.path.exists(output_path):
                     raise RuntimeError(
                         "Download finished but output file was not found."
@@ -155,7 +165,7 @@ async def download_video(url: str) -> str:
                     f"Download attempt {attempt} failed: {e}"
                 )
 
-                # پاک کردن فایل ناقص
+                # حذف فایل ناقص
                 if os.path.exists(output_path):
                     try:
                         os.remove(output_path)
@@ -164,21 +174,25 @@ async def download_video(url: str) -> str:
                             "Could not remove incomplete output file."
                         )
 
+                # اگر آخرین تلاش بود، خطا را به handler برگردان
                 if attempt == MAX_RETRIES:
                     logger.error(
                         "All download attempts failed."
                     )
                     raise
 
+                # صبر قبل از تلاش بعدی
                 await asyncio.sleep(RETRY_DELAY)
 
     finally:
 
-        # Cookie موقت همیشه باید پاک شود
+        # Cookie موقت همیشه باید حذف شود
         if cookie_path and os.path.exists(cookie_path):
             try:
                 os.remove(cookie_path)
-                logger.info("Temporary cookie file removed.")
+                logger.info(
+                    "Temporary cookie file removed."
+                )
             except OSError:
                 logger.warning(
                     "Could not remove temporary cookie file."
