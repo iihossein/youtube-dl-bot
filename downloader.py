@@ -27,7 +27,7 @@ def _get_cookie_path() -> str | None:
 
 def _download_sync(url: str, output_path: str, cookie_path: str | None) -> None:
     ydl_opts = {
-        "format": "best[ext=mp4][height<=360]/best[height<=360]/best",
+        "format": "bv*[height<=360]+ba/b[height<=360]/bv*+ba/b",
         "outtmpl": output_path,
         "quiet": True,
         "no_warnings": True,
@@ -38,6 +38,7 @@ def _download_sync(url: str, output_path: str, cookie_path: str | None) -> None:
                 "player_client": ["android"],
             }
         },
+        "merge_output_format": "mp4",
     }
     if cookie_path:
         ydl_opts["cookiefile"] = cookie_path
