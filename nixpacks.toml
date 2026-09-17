@@ -3,11 +3,11 @@ nixPkgs = ["...", "ffmpeg", "nodejs", "git"]
 
 [phases.install]
 cmds = [
-  "git clone --depth 1 --single-branch --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /app/bgutil-ytdlp-pot-provider",
+  "docker pull brainicism/bgutil-ytdlp-pot-provider:latest",
   "pip install -r requirements.txt"
 ]
 
 [phases.build]
 cmds = [
-  "cd /app/bgutil-ytdlp-pot-provider/server && npm install && npx tsc"
+  "echo 'Build complete'"
 ]

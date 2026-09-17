@@ -40,17 +40,14 @@ def _download_sync(url: str, output_path: str, cookie_path: str | None) -> None:
         "merge_output_format": "mp4",
         "outtmpl": output_path,
         # لاگ کامل برای تشخیص مشکل
+        "verbose": True,
         "quiet": False,
         "no_warnings": False,
         "noplaylist": True,
         # کامپوننت‌های خارجی برای حل چالش JS
         "remote_components": "ejs:github",
-        # تنظیمات کلاینت mweb
+        # تنظیمات استفاده از سرور HTTP bgutil
         "extractor_args": {
-            "youtube": {
-                "player_client": ["mweb"],
-            },
-            # ✅ استفاده از حالت HTTP Server برای bgutil
             "youtubepot-bgutilhttp": {
                 "base_url": BGUTIL_HTTP_BASEURL,
             },
