@@ -7,6 +7,3 @@ cmds = [
   "cd /app/bgutil-ytdlp-pot-provider/server && npm ci && npx tsc",
   "pip install -r requirements.txt"
 ]
-
-[phases.build]
-cmds = ["echo 'Build complete'"]

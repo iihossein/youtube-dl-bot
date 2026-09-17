@@ -12,7 +12,7 @@ DOWNLOAD_DIR = "downloads"
 MAX_RETRIES = 3
 RETRY_DELAY = 5
 
-# آدرس پیش‌فرض سرور HTTP bgutil (روی localhost)
+# آدرس سرور HTTP bgutil (روی localhost)
 BGUTIL_HTTP_BASEURL = "http://127.0.0.1:4416"
 
 
@@ -34,24 +34,28 @@ def _get_cookie_path() -> str | None:
 def _download_sync(url: str, output_path: str, cookie_path: str | None) -> None:
     """اجرای sync دانلود (داخل thread جداگانه اجرا می‌شود)."""
     ydl_opts = {
+        # بهترین کیفیت موجود
         "format": "bestvideo*+bestaudio/best",
+        # خروجی نهایی MP4
         "merge_output_format": "mp4",
         "outtmpl": output_path,
-        "quiet": False,          # برای دیدن لاگ‌های کامل yt-dlp
-        "no_warnings": False,    # برای دیدن هشدارها
+        # لاگ کامل برای تشخیص مشکل
+        "quiet": False,
+        "no_warnings": False,
         "noplaylist": True,
+        # کامپوننت‌های خارجی برای حل چالش JS
         "remote_components": "ejs:github",
-        # تنظیم کلاینت mweb برای سازگاری با PO Token
+        # تنظیمات کلاینت mweb
         "extractor_args": {
             "youtube": {
                 "player_client": ["mweb"],
             },
-            # استفاده از حالت HTTP Server به جای Script
+            # ✅ استفاده از حالت HTTP Server برای bgutil
             "youtubepot-bgutilhttp": {
                 "base_url": BGUTIL_HTTP_BASEURL,
             },
         },
-        # Node.js برای حل چالش‌های JavaScript
+        # Node.js runtime برای حل چالش‌های JavaScript
         "js_runtimes": {"node": {}},
     }
     if cookie_path:
