@@ -1,1 +1,1 @@
-web: sh -c "docker run --name bgutil-provider -d --init -p 127.0.0.1:4416:4416 brainicism/bgutil-ytdlp-pot-provider:latest && python bot.py"
+web: sh -c "node /app/bgutil-ytdlp-pot-provider/server/build/main.js & python bot.py"
