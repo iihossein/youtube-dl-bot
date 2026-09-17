@@ -2,7 +2,7 @@ import os
 import re
 import logging
 
-from aiogram import Router, F
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -16,6 +16,13 @@ YOUTUBE_REGEX = re.compile(
 )
 
 
+def is_youtube_link(message: Message) -> bool:
+    """فیلتر سفارشی: آیا پیام حاوی لینک YouTube است؟"""
+    if not message.text:
+        return False
+    return bool(YOUTUBE_REGEX.search(message.text))
+
+
 @router.message(Command("start"))
 async def cmd_start(message: Message):
     await message.answer(
@@ -24,7 +31,7 @@ async def cmd_start(message: Message):
     )
 
 
-@router.message(F.text.regexp(YOUTUBE_REGEX))
+@router.message(is_youtube_link)
 async def handle_youtube_link(message: Message):
     url_match = YOUTUBE_REGEX.search(message.text)
     url = url_match.group(0)
@@ -43,4 +50,3 @@ async def handle_youtube_link(message: Message):
     except Exception as e:
         logger.exception("Download failed")
         await status_msg.edit_text(f"❌ خطا در دانلود:\n{type(e).__name__}: {e}")
-        
