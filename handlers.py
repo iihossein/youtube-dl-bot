@@ -1,52 +1,77 @@
-import os
 import re
 import logging
 
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
-
-from downloader import download_video
+from pytubefix import YouTube
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 YOUTUBE_REGEX = re.compile(
-    r"(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)\S+"
+    r"(https?://)?(www\.)?(youtube\.com|youtu\.be)\S+"
 )
-
-
-def is_youtube_link(message: Message) -> bool:
-    """فیلتر سفارشی: آیا پیام حاوی لینک YouTube است؟"""
-    if not message.text:
-        return False
-    return bool(YOUTUBE_REGEX.search(message.text))
 
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
+    """دستور /start"""
     await message.answer(
         "سلام! 👋\n\n"
-        "لینک ویدیوی YouTube را برای من بفرست تا دانلودش کنم."
+        "لینک ویدیوی YouTube را برای من بفرست "
+        "تا لینک دانلود برات تولید کنم."
     )
 
 
-@router.message(is_youtube_link)
+@router.message(lambda msg: msg.text and YOUTUBE_REGEX.search(msg.text))
 async def handle_youtube_link(message: Message):
-    url_match = YOUTUBE_REGEX.search(message.text)
-    url = url_match.group(0)
-    logger.info(f"Received URL: {url} from user {message.from_user.id}")
+    """دریافت لینک YouTube و تولید لینک دانلود"""
+    
+    # استخراج لینک
+    url = YOUTUBE_REGEX.search(message.text).group(0)
+    logger.info(f"URL received: {url} from user {message.from_user.id}")
 
-    status_msg = await message.answer("⏳ در حال دانلود...")
+    # پیام منتظر
+    status_msg = await message.answer("⏳ در حال پردازش...")
 
     try:
-        file_path = await download_video(url)
-        size_mb = os.path.getsize(file_path) / (1024 * 1024)
-        await status_msg.edit_text(
-            f"✅ دانلود شد\n"
-            f"📦 حجم: {size_mb:.2f} MB\n"
-            f"📁 فایل: {os.path.basename(file_path)}"
+        # بارگذاری ویدیو
+        yt = YouTube(url)
+        
+        # انتخاب بهترین کیفیت دسترس‌پذیر
+        stream = (
+            yt.streams
+            .filter(progressive=True, file_extension="mp4")
+            .order_by("resolution")
+            .desc()
+            .first()
         )
+        
+        if not stream:
+            await status_msg.edit_text(
+                "❌ خطا: هیچ فرمت قابل دسترس یافت نشد"
+            )
+            return
+        
+        # دریافت اطلاعات
+        title = yt.title or "ویدیو"
+        resolution = stream.resolution or "نامشخص"
+        download_url = stream.url
+        
+        # ارسال لینک دانلود
+        await status_msg.edit_text(
+            f"✅ آماده است!\n\n"
+            f"<b>عنوان:</b> {title}\n"
+            f"<b>کیفیت:</b> {resolution}\n\n"
+            f"<a href='{download_url}'>کلیک برای دانلود</a>",
+            parse_mode="HTML"
+        )
+        
     except Exception as e:
-        logger.exception("Download failed")
-        await status_msg.edit_text(f"❌ خطا در دانلود:\n{type(e).__name__}: {e}")
+        logger.exception("Error occurred")
+        error_msg = str(e)[:100]  # فقط ۱۰۰ کاراکتر اول
+        await status_msg.edit_text(
+            f"❌ خطا:\n<code>{error_msg}</code>",
+            parse_mode="HTML"
+        )
