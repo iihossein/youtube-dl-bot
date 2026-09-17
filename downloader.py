@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import shutil
 import tempfile
 import uuid
 
@@ -19,12 +18,10 @@ RETRY_DELAY = 5
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-BGUTIL_SCRIPT_PATH = os.path.join(
+BGUTIL_SERVER_HOME = os.path.join(
     BASE_DIR,
     "bgutil-ytdlp-pot-provider",
     "server",
-    "build",
-    "generate_once.js",
 )
 
 
@@ -37,7 +34,9 @@ def _get_cookie_path() -> str | None:
     cookies_content = os.getenv("YTDLP_COOKIES")
 
     if not cookies_content:
-        logger.warning("YTDLP_COOKIES is not configured.")
+        logger.warning(
+            "YTDLP_COOKIES is not configured."
+        )
         return None
 
     temp_cookie_file = tempfile.NamedTemporaryFile(
@@ -51,11 +50,14 @@ def _get_cookie_path() -> str | None:
         temp_cookie_file.write(cookies_content)
         temp_cookie_file.close()
 
-        logger.info("YouTube cookies loaded from environment.")
+        logger.info(
+            "YouTube cookies loaded from environment."
+        )
 
         return temp_cookie_file.name
 
     except Exception:
+
         try:
             temp_cookie_file.close()
         except Exception:
@@ -69,31 +71,26 @@ def _get_cookie_path() -> str | None:
 
 def _check_bgutil() -> None:
     """
-    بررسی می‌کند که Provider و Node واقعاً
-    داخل Deployment موجود باشند.
+    بررسی می‌کند که bgutil واقعاً در Deployment نصب شده باشد.
     """
 
-    if not os.path.isfile(BGUTIL_SCRIPT_PATH):
-        raise RuntimeError(
-            "bgutil script not found: "
-            f"{BGUTIL_SCRIPT_PATH}"
-        )
+    script_path = os.path.join(
+        BGUTIL_SERVER_HOME,
+        "build",
+        "generate_once.js",
+    )
 
-    node_path = shutil.which("node")
+    if not os.path.isfile(script_path):
 
-    if not node_path:
         raise RuntimeError(
-            "Node.js executable was not found in PATH."
+            "bgutil script not found.\n"
+            f"Expected path: {script_path}\n"
+            f"Server home: {BGUTIL_SERVER_HOME}"
         )
 
     logger.info(
         "bgutil script found: %s",
-        BGUTIL_SCRIPT_PATH,
-    )
-
-    logger.info(
-        "Node.js found: %s",
-        node_path,
+        script_path,
     )
 
 
@@ -106,39 +103,42 @@ def _download_sync(
     _check_bgutil()
 
     ydl_opts = {
+
         # بهترین کیفیت موجود
         "format": "bestvideo*+bestaudio/best",
 
-        # خروجی نهایی
+        # خروجی نهایی MP4
         "merge_output_format": "mp4",
 
-        # مسیر ذخیره
+        # مسیر فایل
         "outtmpl": output_path,
 
-        # برای این مرحله لاگ را خاموش نمی‌کنیم
-        # تا وضعیت PO Token در Railway قابل مشاهده باشد.
+        # لاگ کامل برای تشخیص مشکل
         "quiet": False,
         "no_warnings": False,
 
         # فقط همان ویدیو
         "noplaylist": True,
 
-        # EJS
+        # JavaScript components
         "remote_components": "ejs:github",
 
-        # Node runtime
+        # Node.js runtime
         "js_runtimes": {
             "node": {},
         },
 
         "extractor_args": {
+
             "youtube": {
-                "player_client": ["mweb"],
+                "player_client": [
+                    "mweb",
+                ],
             },
 
             # bgutil Script Mode
             "youtubepot-bgutilscript": {
-                "script_path": BGUTIL_SCRIPT_PATH,
+                "server_home": BGUTIL_SERVER_HOME,
             },
         },
     }
@@ -147,21 +147,21 @@ def _download_sync(
         ydl_opts["cookiefile"] = cookie_path
 
     logger.info(
-        "Using YouTube player client: mweb"
-    )
-
-    logger.info(
-        "Using bgutil script: %s",
-        BGUTIL_SCRIPT_PATH,
+        "Using bgutil server home: %s",
+        BGUTIL_SERVER_HOME,
     )
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+
         ydl.download([url])
 
 
 async def download_video(url: str) -> str:
 
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    os.makedirs(
+        DOWNLOAD_DIR,
+        exist_ok=True,
+    )
 
     output_path = os.path.join(
         DOWNLOAD_DIR,
@@ -174,7 +174,10 @@ async def download_video(url: str) -> str:
 
     try:
 
-        for attempt in range(1, MAX_RETRIES + 1):
+        for attempt in range(
+            1,
+            MAX_RETRIES + 1,
+        ):
 
             try:
 
@@ -185,8 +188,9 @@ async def download_video(url: str) -> str:
                     url,
                 )
 
-                # حذف فایل احتمالی از تلاش قبلی
+                # حذف فایل ناقص قبلی
                 if os.path.exists(output_path):
+
                     os.remove(output_path)
 
                 await loop.run_in_executor(
@@ -198,22 +202,25 @@ async def download_video(url: str) -> str:
                 )
 
                 if not os.path.isfile(output_path):
+
                     raise RuntimeError(
-                        "Download completed but output file "
-                        "was not created."
+                        "Download completed but "
+                        "output file was not created."
                     )
 
-                file_size = os.path.getsize(output_path)
+                file_size = os.path.getsize(
+                    output_path
+                )
 
                 if file_size <= 0:
+
                     raise RuntimeError(
                         "Downloaded file is empty."
                     )
 
                 logger.info(
                     "Download successful. "
-                    "Path=%s Size=%s bytes",
-                    output_path,
+                    "Size=%s bytes",
                     file_size,
                 )
 
@@ -227,30 +234,40 @@ async def download_video(url: str) -> str:
                     e,
                 )
 
-                # حذف فایل ناقص
                 if os.path.exists(output_path):
+
                     try:
                         os.remove(output_path)
+
                     except OSError:
+
                         logger.warning(
-                            "Could not remove incomplete file: %s",
-                            output_path,
+                            "Could not remove "
+                            "incomplete output file."
                         )
 
                 if attempt == MAX_RETRIES:
+
                     logger.error(
-                        "All %s download attempts failed.",
-                        MAX_RETRIES,
+                        "All download attempts failed."
                     )
+
                     raise
 
-                await asyncio.sleep(RETRY_DELAY)
+                await asyncio.sleep(
+                    RETRY_DELAY
+                )
 
     finally:
 
         # Cookie موقت همیشه حذف شود
-        if cookie_path and os.path.exists(cookie_path):
+        if (
+            cookie_path
+            and os.path.exists(cookie_path)
+        ):
+
             try:
+
                 os.remove(cookie_path)
 
                 logger.info(
@@ -258,6 +275,8 @@ async def download_video(url: str) -> str:
                 )
 
             except OSError:
+
                 logger.warning(
-                    "Could not remove temporary cookie file."
+                    "Could not remove "
+                    "temporary cookie file."
                 )
