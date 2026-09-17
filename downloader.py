@@ -279,4 +279,4 @@ async def download_video(url: str) -> str:
                 logger.warning(
                     "Could not remove "
                     "temporary cookie file."
-                )
+                ) 
