@@ -41,14 +41,12 @@ def _download_sync(url: str, output_path: str, cookie_path: str | None) -> None:
         "noplaylist": True,
         # کامپوننت خارجی برای حل چالش JS یوتیوب
         "remote_components": "ejs:github",
-        # استفاده از کلاینت android که ممکن است به PO Token نیاز نداشته باشد
+        # ✅ کلاینت mweb: سازگار با PO Token Provider
         "extractor_args": {
             "youtube": {
-                "player_client": ["android"],
+                "player_client": ["mweb"],
             }
         },
-        # فعال‌سازی اجراکننده جاوااسکریپت (در صورت نیاز)
-        "js_runtimes": {"node": {}},
     }
     if cookie_path:
         ydl_opts["cookiefile"] = cookie_path
