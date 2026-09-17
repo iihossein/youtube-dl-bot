@@ -1,1 +1,1 @@
-web: python bot.py
+web: sh -c "node /app/bgutil-ytdlp-pot-provider/server/build/main.js & python bot.py"
