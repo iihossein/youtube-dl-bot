@@ -34,25 +34,18 @@ def _get_cookie_path() -> str | None:
 def _download_sync(url: str, output_path: str, cookie_path: str | None) -> None:
     """اجرای sync دانلود (داخل thread جداگانه اجرا می‌شود)."""
     ydl_opts = {
-        # بهترین کیفیت موجود
         "format": "bestvideo*+bestaudio/best",
-        # خروجی نهایی MP4
         "merge_output_format": "mp4",
         "outtmpl": output_path,
-        # لاگ کامل برای تشخیص مشکل
-        "verbose": True,
         "quiet": False,
         "no_warnings": False,
         "noplaylist": True,
-        # کامپوننت‌های خارجی برای حل چالش JS
         "remote_components": "ejs:github",
-        # تنظیمات استفاده از سرور HTTP bgutil
         "extractor_args": {
             "youtubepot-bgutilhttp": {
                 "base_url": BGUTIL_HTTP_BASEURL,
             },
         },
-        # Node.js runtime برای حل چالش‌های JavaScript
         "js_runtimes": {"node": {}},
     }
     if cookie_path:
