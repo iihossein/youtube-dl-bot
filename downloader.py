@@ -12,14 +12,15 @@ DOWNLOAD_DIR = "downloads"
 MAX_RETRIES = 3
 RETRY_DELAY = 5
 
-# آدرس سرور HTTP bgutil (روی localhost)
-BGUTIL_HTTP_BASEURL = "http://127.0.0.1:4416"
+# آدرس سرویس POT Provider در Railway (از متغیر محیطی خوانده می‌شود)
+BGUTIL_HTTP_BASEURL = os.getenv("BGUTIL_HTTP_BASEURL", "http://bgutil-provider.railway.internal:4416")
 
 
 def _get_cookie_path() -> str | None:
     """خواندن کوکی‌ها از متغیر محیطی و نوشتن در فایل موقت."""
     cookies_content = os.getenv("YTDLP_COOKIES")
     if not cookies_content:
+        logger.warning("YTDLP_COOKIES is not configured.")
         return None
 
     temp_cookie_file = tempfile.NamedTemporaryFile(
@@ -37,6 +38,7 @@ def _download_sync(url: str, output_path: str, cookie_path: str | None) -> None:
         "format": "bestvideo*+bestaudio/best",
         "merge_output_format": "mp4",
         "outtmpl": output_path,
+        "verbose": True,
         "quiet": False,
         "no_warnings": False,
         "noplaylist": True,
@@ -46,7 +48,6 @@ def _download_sync(url: str, output_path: str, cookie_path: str | None) -> None:
                 "base_url": BGUTIL_HTTP_BASEURL,
             },
         },
-        "js_runtimes": {"node": {}},
     }
     if cookie_path:
         ydl_opts["cookiefile"] = cookie_path
