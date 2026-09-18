@@ -21,37 +21,57 @@ def _get_cookie_path() -> str | None:
         )
         temp.write(cookies_content)
         temp.close()
+        logger.info("Cookies loaded from YTDLP_COOKIES env var.")
         return temp.name
 
     local_cookies = os.path.join(BASE_DIR, "cookies.txt")
     if os.path.exists(local_cookies):
+        logger.info("Cookies loaded from local cookies.txt file.")
         return local_cookies
 
     logger.warning("No cookies found (neither YTDLP_COOKIES nor cookies.txt)")
     return None
 
 
-def _build_ydl_opts(output_template: str, format_spec: str, cookie_path: str | None) -> dict:
-    """ساخت یک dict مشترک برای دو بار دانلود."""
+def _build_ydl_opts(
+    output_template: str,
+    format_spec: str,
+    cookie_path: str | None,
+) -> dict:
+    """
+    ساخت یک dict مشترک برای دو بار دانلود (ویدیو و صدا).
+
+    نکات کلیدی:
+    - player_client = "web" → با کوکی‌های معتبر کار می‌کند و به PO Token نیاز ندارد.
+    - remote_components = ["ejs:github"] → چالش n (JavaScript) را از راه دور حل می‌کند.
+      این جایگزین نیاز به نصب Node.js یا Deno روی سرور است.
+    """
     opts = {
         "format": format_spec,
         "outtmpl": output_template,
         "noplaylist": True,
         "quiet": False,
         "no_warnings": False,
-        # SABR-safe: کلاینت mweb فرمت‌های جدا را برمی‌گرداند
+        # ✅ استفاده از کلاینت web که با کوکی سازگار است
         "extractor_args": {
             "youtube": {
-                "player_client": ["mweb", "web"],
+                "player_client": ["web"],
             },
         },
+        # ✅ حل چالش JavaScript از راه دور (بدون نیاز به Node.js/Deno)
+        "remote_components": ["ejs:github"],
     }
     if cookie_path:
         opts["cookiefile"] = cookie_path
     return opts
 
 
-def _download_sync(url: str, output_template: str, format_spec: str, cookie_path: str | None) -> None:
+def _download_sync(
+    url: str,
+    output_template: str,
+    format_spec: str,
+    cookie_path: str | None,
+) -> None:
     opts = _build_ydl_opts(output_template, format_spec, cookie_path)
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.download([url])
