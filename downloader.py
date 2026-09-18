@@ -42,9 +42,9 @@ def _build_ydl_opts(
     ساخت یک dict مشترک برای دو بار دانلود (ویدیو و صدا).
 
     نکات کلیدی:
-    - player_client = "web" → با کوکی‌های معتبر کار می‌کند و به PO Token نیاز ندارد.
-    - remote_components = ["ejs:github"] → چالش n (JavaScript) را از راه دور حل می‌کند.
-      این جایگزین نیاز به نصب Node.js یا Deno روی سرور است.
+    - player_client = "web" → با کوکی‌های معتبر کار می‌کند.
+    - remote_components = ["ejs:github"] → چالش n را از راه دور حل می‌کند.
+    - js_runtimes = {"node": {}} → از Node.js برای اجرای اسکریپت EJS استفاده می‌کند.
     """
     opts = {
         "format": format_spec,
@@ -58,8 +58,10 @@ def _build_ydl_opts(
                 "player_client": ["web"],
             },
         },
-        # ✅ حل چالش JavaScript از راه دور (بدون نیاز به Node.js/Deno)
+        # ✅ حل چالش JavaScript از راه دور (EJS scripts)
         "remote_components": ["ejs:github"],
+        # ✅ استفاده از Node.js برای اجرای اسکریپت EJS
+        "js_runtimes": {"node": {}},
     }
     if cookie_path:
         opts["cookiefile"] = cookie_path
@@ -129,7 +131,6 @@ async def download_video_and_audio(url: str) -> tuple[str, str]:
         return video_path, audio_path
 
     except Exception:
-        # پاک‌سازی در صورت خطا
         for prefix in (f"{uid}_video", f"{uid}_audio"):
             p = _find_file_by_prefix(prefix)
             if p and os.path.exists(p):
