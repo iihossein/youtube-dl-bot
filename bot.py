@@ -1,11 +1,15 @@
 import asyncio
 import logging
 
+from aiohttp import web
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp import web
+from aiogram.webhook.aiohttp_server import (
+    SimpleRequestHandler,
+    setup_application,
+)
 
 from config import (
     BOT_TOKEN,
@@ -17,13 +21,16 @@ from config import (
 )
 from handlers import router
 
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+logger = logging.getLogger(__name__)
 
 
-async def main():
+async def main() -> None:
+    # ---------- ساخت ربات و دیسپچر ----------
     bot = Bot(
         token=BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -31,29 +38,60 @@ async def main():
     dp = Dispatcher()
     dp.include_router(router)
 
-    if USE_WEBHOOK:
-        # ---------- حالت webhook (production) ----------
-        app = web.Application()
-        webhook_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
-        webhook_handler.register(app, path=WEBHOOK_PATH)
-        setup_application(app, dp, bot=bot)
+    # =====================================
+    # حالت ۱: Polling (لوکال)
+    # =====================================
+    if not USE_WEBHOOK:
+        logger.info("Starting bot in POLLING mode...")
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            await dp.start_polling(bot)
+        finally:
+            await bot.session.close()
+        return
 
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, WEBAPP_HOST, WEBAPP_PORT)
-        await site.start()
+    # =====================================
+    # حالت ۲: Webhook (Railway)
+    # =====================================
+    if not WEBHOOK_URL:
+        raise ValueError(
+            "USE_WEBHOOK=true است اما WEBHOOK_URL خالی است. "
+            "WEBHOOK_HOST را در Variables تنظیم کن."
+        )
 
-        await bot.set_webhook(WEBHOOK_URL)
-        logging.info(f"Webhook set to {WEBHOOK_URL}")
+    await bot.set_webhook(WEBHOOK_URL)
+    logger.info("Webhook set to %s", WEBHOOK_URL)
 
-        # برنامه را زنده نگه می‌دارد
+    app = web.Application()
+
+    webhook_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+    )
+    webhook_handler.register(app, path=WEBHOOK_PATH)
+
+    setup_application(app, dp, bot=bot)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    site = web.TCPSite(runner, WEBAPP_HOST, WEBAPP_PORT)
+    await site.start()
+
+    logger.info("Server started on %s:%s", WEBAPP_HOST, WEBAPP_PORT)
+
+    try:
+        # اجرای دائمی تا زمانی که پروسه kill شود
         await asyncio.Event().wait()
-    else:
-        # ---------- حالت polling (لوکال) ----------
-        logging.info("Starting bot in polling mode...")
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot)
+    finally:
+        # پاک‌سازی هنگام خروج
+        await bot.delete_webhook()
+        await runner.cleanup()
+        await bot.session.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot stopped.")

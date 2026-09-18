@@ -1,66 +1,121 @@
-import os
-import logging
 import asyncio
-import subprocess
-from pathlib import Path
+import os
+import uuid
+import logging
+import tempfile
+
+import yt_dlp
 
 logger = logging.getLogger(__name__)
 
-DOWNLOADS_DIR = "/tmp/youtube_downloads"
-Path(DOWNLOADS_DIR).mkdir(parents=True, exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 
-async def download_video(url: str, video_id: str) -> str:
-    """دانلود ویدیو با yt-dlp (ویدیو + صوت ادغام شده)"""
-    try:
-        logger.info(f"شروع دانلود: {url}")
-        
-        output_path = os.path.join(DOWNLOADS_DIR, f"{video_id}.mp4")
-        
-        # دستور yt-dlp
-        cmd = [
-            'yt-dlp',
-            '-f', 'best[ext=mp4]',  # بهترین فرمت MP4
-            '-o', output_path,
-            '--quiet',
-            url
-        ]
-        
-        # اجرای yt-dlp به صورت غیر‌همزمان
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+
+def _get_cookie_path() -> str | None:
+    """اول از env می‌خواند، بعد از فایل لوکال."""
+    cookies_content = os.getenv("YTDLP_COOKIES")
+    if cookies_content:
+        temp = tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".txt", encoding="utf-8"
         )
-        
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
-        
-        if process.returncode != 0:
-            logger.error(f"yt-dlp خطا: {stderr.decode()}")
-            return None
-        
-        if os.path.exists(output_path):
-            file_size_mb = os.path.getsize(output_path) / 1024 / 1024
-            logger.info(f"دانلود موفق: {file_size_mb:.1f} MB")
-            return output_path
-        else:
-            logger.error("فایل دانلود شده یافت نشد")
-            return None
-    
-    except asyncio.TimeoutError:
-        logger.error("تایم‌آوت دانلود")
-        return None
-    except Exception as e:
-        logger.error(f"خطا در دانلود: {str(e)}")
-        return None
+        temp.write(cookies_content)
+        temp.close()
+        return temp.name
 
-async def cleanup_old_files(max_age_seconds=3600):
-    """حذف فایل‌های قدیمی‌تر از 1 ساعت"""
-    import time
-    current_time = time.time()
+    local_cookies = os.path.join(BASE_DIR, "cookies.txt")
+    if os.path.exists(local_cookies):
+        return local_cookies
+
+    logger.warning("No cookies found (neither YTDLP_COOKIES nor cookies.txt)")
+    return None
+
+
+def _build_ydl_opts(output_template: str, format_spec: str, cookie_path: str | None) -> dict:
+    """ساخت یک dict مشترک برای دو بار دانلود."""
+    opts = {
+        "format": format_spec,
+        "outtmpl": output_template,
+        "noplaylist": True,
+        "quiet": False,
+        "no_warnings": False,
+        # SABR-safe: کلاینت mweb فرمت‌های جدا را برمی‌گرداند
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["mweb", "web"],
+            },
+        },
+    }
+    if cookie_path:
+        opts["cookiefile"] = cookie_path
+    return opts
+
+
+def _download_sync(url: str, output_template: str, format_spec: str, cookie_path: str | None) -> None:
+    opts = _build_ydl_opts(output_template, format_spec, cookie_path)
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.download([url])
+
+
+def _find_file_by_prefix(prefix: str) -> str | None:
+    """چون yt-dlp ممکن است پسوند را تغییر دهد، بر اساس prefix جستجو می‌کنیم."""
+    for name in os.listdir(DOWNLOAD_DIR):
+        if name.startswith(prefix):
+            return os.path.join(DOWNLOAD_DIR, name)
+    return None
+
+
+async def download_video_and_audio(url: str) -> tuple[str, str]:
+    """دانلود ویدیو و صدا به صورت جداگانه. مسیر دو فایل را برمی‌گرداند."""
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    uid = str(uuid.uuid4())
+
+    video_template = os.path.join(DOWNLOAD_DIR, f"{uid}_video.%(ext)s")
+    audio_template = os.path.join(DOWNLOAD_DIR, f"{uid}_audio.%(ext)s")
+
+    cookie_path = _get_cookie_path()
+    loop = asyncio.get_running_loop()
+
     try:
-        for file in Path(DOWNLOADS_DIR).glob("*.mp4"):
-            if current_time - file.stat().st_mtime > max_age_seconds:
-                file.unlink()
-                logger.info(f"حذف فایل قدیمی: {file}")
-    except Exception as e:
-        logger.error(f"خطا در پاک‌کردن: {str(e)}")
+        # ---------- VIDEO ----------
+        logger.info("Downloading video...")
+        await loop.run_in_executor(
+            None,
+            _download_sync,
+            url,
+            video_template,
+            "bestvideo[height<=480]/bestvideo[height<=720]/bestvideo",
+            cookie_path,
+        )
+        video_path = _find_file_by_prefix(f"{uid}_video")
+        if not video_path:
+            raise RuntimeError("فایل ویدیو ساخته نشد.")
+
+        # ---------- AUDIO ----------
+        logger.info("Downloading audio...")
+        await loop.run_in_executor(
+            None,
+            _download_sync,
+            url,
+            audio_template,
+            "bestaudio/best",
+            cookie_path,
+        )
+        audio_path = _find_file_by_prefix(f"{uid}_audio")
+        if not audio_path:
+            raise RuntimeError("فایل صدا ساخته نشد.")
+
+        logger.info("Download complete: video=%s audio=%s", video_path, audio_path)
+        return video_path, audio_path
+
+    except Exception:
+        # پاک‌سازی در صورت خطا
+        for prefix in (f"{uid}_video", f"{uid}_audio"):
+            p = _find_file_by_prefix(prefix)
+            if p and os.path.exists(p):
+                os.remove(p)
+        raise
+    finally:
+        if cookie_path and cookie_path.startswith(tempfile.gettempdir()):
+            if os.path.exists(cookie_path):
+                os.remove(cookie_path)
